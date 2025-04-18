@@ -4,8 +4,6 @@ import numpy as np
 import requests
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D
-from io import BytesIO
-import time
 
 # Set page configuration
 st.set_page_config(page_title="Real-time Emotion Detection", layout="wide")
@@ -45,9 +43,11 @@ def main():
     
     # Backend configuration
     backend_url = st.text_input("Backend URL", "http://192.168.1.10:8000/stream")
+    backend_url_POST = st.text_input("Backend URL", "http://192.168.1.10:8000/output")
     
     # Create placeholder for video
     video_placeholder = st.empty()
+    status_placeholder = st.empty()
     
     # Control buttons
     start_button = st.button("Start Detection")
@@ -102,13 +102,16 @@ def main():
                                 prediction = model.predict(cropped_img)
                                 maxindex = np.argmax(prediction)
                                 
+                                emotion_name = emotion_dict[maxindex]
+                                Send_Emotion_To_Backend(backend_url_POST, maxindex, emotion_name , status_placeholder)
+
                                 # Add emotion text
                                 cv2.putText(frame, emotion_dict[maxindex], (x+20, y-60), 
                                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
                             
                             # Convert BGR to RGB and display
                             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                            video_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
+                            video_placeholder.image(frame_rgb, channels="RGB")
                             
             except requests.exceptions.RequestException as e:
                 st.error(f"Connection error: {e}")
@@ -116,6 +119,23 @@ def main():
                 
     finally:
         session.close()
+
+def Send_Emotion_To_Backend(backend_url_POST, emotion, emotion_name , status_placeholder):
+    try:
+        post_response = requests.post(
+            backend_url_POST,
+            json={"emotion": str(emotion),
+                  "emotion_name" : emotion_name
+                  },
+            timeout=2
+        )
+        if post_response.status_code == 200:
+            status_placeholder.success(f"✅ {emotion_name} (Index {emotion}) emotion posted to backend!")
+        else:
+            status_placeholder.error(f"⚠️ POST failed: {post_response.status_code} - {post_response.text}")
+    except Exception as e:
+        status_placeholder.error(f"⚠️ POST error: {str(e)}")
+    
 
 if __name__ == "__main__":
     main()

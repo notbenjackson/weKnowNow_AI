@@ -5,8 +5,62 @@ import cv2
 import numpy as np
 import socket
 import uvicorn
+import requests
+
+
+import numpy as np
+data = np.int64(123)
+json_data = {"value": int(data)}  # Convert to Python int
+
 
 app = FastAPI()
+
+# Get the token from environment variables
+UBIDOTS_TOKEN = "BBUS-hdOvglR01mmpnwIbLyC9DrqyQgfK9A"
+    
+UBIDOTS_DEVICE_LABEL = "esp32-sic6" 
+UBIDOTS_VARIABLE_LABEL = "emotions-string"  
+UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE_LABEL}"
+
+def send_to_ubidots(emotion_code, emotion_name):
+    headers = {
+        "X-Auth-Token": UBIDOTS_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    # Correct payload structure to match Ubidots requirements
+    payload = {
+        UBIDOTS_VARIABLE_LABEL: {
+            "value": int(emotion_code),  # Numerical value for the variable
+            "context": {
+                "emotion_name": emotion_name  # String data in context
+            }
+        }
+    }
+
+    try:
+        print(f"Sending payload: {payload}")  # Debug print
+        response = requests.post(
+            UBIDOTS_URL,
+            headers=headers,    
+            json=payload,
+            timeout=10
+        )
+        print(f"Response: {response.status_code}, {response.text}")  # Debug
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:  # Catch only request exceptions
+        print(f"Error sending to Ubidots: {str(e)}")
+        if e.response is not None:
+            print(f"Response content: {e.response.text}")
+        return False
+    except Exception as e:
+        print(f"A general exception occurred: {str(e)}")
+        return False
+
+
+
+
 
 def get_local_ip():
     """Get the local IP address of the machine"""
@@ -53,6 +107,30 @@ async def receive_frame(file: bytes = Body(...)):  # Changed from UploadFile to 
         return {"message": "Frame received successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/output")
+async def receive_output(data: dict = Body(...)):
+    try:
+        emotion_code = data.get("emotion")
+        emotion_name = data.get("emotion_name")
+        
+        if emotion_code is None:
+            raise HTTPException(status_code=400, detail="Missing emotion code")
+        
+
+        print(emotion_code)
+
+        ubidots_result = send_to_ubidots(emotion_code, emotion_name)
+        
+        if ubidots_result:
+            return {"message": f"Emotion code {emotion_code} sent to Ubidots"}
+        else:
+            return {"message": "Failed to send to Ubidots"}, 500
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.get("/stream")
 def get_stream():
