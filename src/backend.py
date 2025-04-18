@@ -96,6 +96,7 @@ app.add_middleware(
 
 # In-memory storage for the latest frame
 latest_frame = None
+latest_emotion = 0
 
 @app.post("/upload")
 async def receive_frame(file: bytes = Body(...)):  # Changed from UploadFile to bytes
@@ -110,6 +111,7 @@ async def receive_frame(file: bytes = Body(...)):  # Changed from UploadFile to 
 
 @app.post("/output")
 async def receive_output(data: dict = Body(...)):
+    global latest_emotion
     try:
         emotion_code = data.get("emotion")
         emotion_name = data.get("emotion_name")
@@ -118,7 +120,7 @@ async def receive_output(data: dict = Body(...)):
             raise HTTPException(status_code=400, detail="Missing emotion code")
         
 
-        print(emotion_code)
+        latest_emotion = emotion_code
 
         ubidots_result = send_to_ubidots(emotion_code, emotion_name)
         
@@ -129,6 +131,13 @@ async def receive_output(data: dict = Body(...)):
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/emotion")
+def get_emotion():
+    global latest_emotion
+    return {"emotion": latest_emotion}
+
 
 
 
